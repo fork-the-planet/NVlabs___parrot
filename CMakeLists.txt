@@ -367,11 +367,11 @@ endif() # PARROT_BUILD_TESTS
 if(PARROT_BUILD_EXAMPLES)
     message(STATUS "Building Parrot examples")
     
-    # Add starter examples as executables
-file(GLOB STARTER_EXAMPLES "${CMAKE_CURRENT_SOURCE_DIR}/examples/starter/*.cu")
+    # Add examples as executables
+file(GLOB STARTER_EXAMPLES "${CMAKE_CURRENT_SOURCE_DIR}/examples/*/*.cu")
 foreach(example_path ${STARTER_EXAMPLES})
     get_filename_component(example_name ${example_path} NAME_WE)
-    set(target_name "${example_name}_starter")
+    set(target_name "${example_name}_example")
     
     add_executable(${target_name} ${example_path})
     set_target_properties(${target_name} PROPERTIES 

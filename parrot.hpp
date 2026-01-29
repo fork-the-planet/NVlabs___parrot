@@ -330,9 +330,9 @@ struct add {
  * @brief Function object for multiplication
  */
 struct mul {
-    template <typename T>
-    __host__ __device__ auto operator()(const T &a,
-                                        const T &b) const -> decltype(a * b) {
+    template <typename T1, typename T2>
+    __host__ __device__ auto operator()(const T1 &a,
+                                        const T2 &b) const -> decltype(a * b) {
         return a * b;
     }
 };
@@ -356,6 +356,17 @@ struct idiv {
     __host__ __device__ auto operator()(const T &a, const T &b) const -> T {
         if (std::is_integral<T>::value) { return a / b; }
         return static_cast<T>(static_cast<int>(a / b));
+    }
+};
+
+/**
+ * @brief Function object for modulo operation
+ */
+struct mod {
+    template <typename T1, typename T2>
+    __host__ __device__ auto operator()(const T1 &a,
+                                        const T2 &b) const -> decltype(a % b) {
+        return a % b;
     }
 };
 
@@ -686,6 +697,18 @@ class fusion_array {
 
     // Track if the array is sorted (for optimization purposes)
     bool _is_sorted = false;
+
+    // Helper to get unmasked data as a fusion_array
+    [[nodiscard]] auto _data() const {
+        return fusion_array<Iterator, no_mask_t>(_begin, _end, _owned_storage);
+    }
+
+    // Helper to get mask as a fusion_array (only valid when has_mask)
+    [[nodiscard]] auto _mask() const {
+        static_assert(has_mask, "_mask() requires a masked array");
+        return fusion_array<MaskIterator, no_mask_t>(
+          _mask_range.first, _mask_range.second, _mask_storage);
+    }
 
     // Helper to apply mask for eager operations
     [[nodiscard]] auto _apply_mask_if_needed() const {
@@ -1072,6 +1095,22 @@ class fusion_array {
     template <typename T = int>
     auto idiv(T scalar) const {
         return map2(scalar, parrot::idiv{});
+    }
+
+    /**
+     * @brief Compute modulo of each element by a scalar or perform element-wise
+     * modulo with another fusion_array.
+     * @tparam T The type of the argument, which can be a scalar or another
+     * fusion_array.
+     * @param arg The scalar value to compute modulo by or the other
+     * fusion_array for element-wise modulo.
+     * @return A new fusion_array with the modulo operation applied.
+     * @throws std::invalid_argument if `arg` is a fusion_array and shapes are
+     * incompatible for element-wise operations.
+     */
+    template <typename T>
+    auto mod(const T &arg) const {
+        return map2(arg, parrot::mod{});
     }
 
     /**
@@ -1536,9 +1575,8 @@ class fusion_array {
     [[nodiscard]] auto sum(
       std::integral_constant<int, Axis> /*axis*/ = {}) const {
         if constexpr (has_mask) {
-            // Apply mask first
-            auto unmasked = _apply_mask_if_needed();
-            return unmasked.template sum<Axis>();
+            // Zero out masked elements and sum (no materialization)
+            return (_mask() * _data()).template sum<Axis>();
         } else {
             return reduce<Axis>(value_type(0), thrust::plus<value_type>());
         }
@@ -2733,17 +2771,17 @@ class fusion_array {
     }
 
     // clang-format off
-     auto operator/ (auto const &arg) const { return this->div(arg);   }
-     auto operator- (auto const &arg) const { return this->minus(arg); }
-     auto operator+ (auto const &arg) const { return this->add(arg);   }
-     auto operator* (auto const &arg) const { return this->times(arg); }
-     auto operator< (auto const &arg) const { return this->lt(arg);    }
-     auto operator<=(auto const &arg) const { return this->lte(arg);   }
-     auto operator> (auto const &arg) const { return this->gt(arg);    }
-     auto operator>=(auto const &arg) const { return this->gte(arg);   }
-     auto operator==(auto const &arg) const { return this->eq(arg);    }
-     auto operator!=(auto const &arg) const { return this->neq(arg);   }
-     // auto operator%(auto const &arg) const { return this->mod(arg); } // TODO
+    auto operator/ (auto const &arg) const { return this->div(arg);   }
+    auto operator- (auto const &arg) const { return this->minus(arg); }
+    auto operator+ (auto const &arg) const { return this->add(arg);   }
+    auto operator* (auto const &arg) const { return this->times(arg); }
+    auto operator< (auto const &arg) const { return this->lt(arg);    }
+    auto operator<=(auto const &arg) const { return this->lte(arg);   }
+    auto operator> (auto const &arg) const { return this->gt(arg);    }
+    auto operator>=(auto const &arg) const { return this->gte(arg);   }
+    auto operator==(auto const &arg) const { return this->eq(arg);    }
+    auto operator!=(auto const &arg) const { return this->neq(arg);   }
+    auto operator% (auto const &arg) const { return this->mod(arg);   }
     // clang-format on
 };
 
