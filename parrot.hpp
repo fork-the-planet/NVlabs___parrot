@@ -23,7 +23,6 @@
 #include <thrust/device_reference.h>
 #include <thrust/device_vector.h>
 #include <thrust/functional.h>
-#include <thrust/iterator/constant_iterator.h>
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/iterator/discard_iterator.h>
 #include <thrust/iterator/permutation_iterator.h>
@@ -42,7 +41,7 @@
 #include <cmath>
 #include <cstdint>
 #include <ctime>
-
+#include <cuda/iterator>
 #include <initializer_list>
 #include <iomanip>
 #include <iostream>
@@ -209,8 +208,8 @@ struct add_functor {
 // Delta functor for adjacent element differences
 struct delta {
     template <typename T>
-    __host__ __device__ auto operator()(const T &a,
-                                        const T &b) const -> decltype(b - a) {
+    __host__ __device__ auto operator()(const T &a, const T &b) const
+      -> decltype(b - a) {
         return b - a;
     }
 };
@@ -320,8 +319,8 @@ struct gte {
  */
 struct add {
     template <typename T>
-    __host__ __device__ auto operator()(const T &a,
-                                        const T &b) const -> decltype(a + b) {
+    __host__ __device__ auto operator()(const T &a, const T &b) const
+      -> decltype(a + b) {
         return a + b;
     }
 };
@@ -331,8 +330,8 @@ struct add {
  */
 struct mul {
     template <typename T1, typename T2>
-    __host__ __device__ auto operator()(const T1 &a,
-                                        const T2 &b) const -> decltype(a * b) {
+    __host__ __device__ auto operator()(const T1 &a, const T2 &b) const
+      -> decltype(a * b) {
         return a * b;
     }
 };
@@ -342,8 +341,8 @@ struct mul {
  */
 struct div {
     template <typename T1, typename T2>
-    __host__ __device__ auto operator()(const T1 &a,
-                                        const T2 &b) const -> decltype(a / b) {
+    __host__ __device__ auto operator()(const T1 &a, const T2 &b) const
+      -> decltype(a / b) {
         return a / b;
     }
 };
@@ -364,8 +363,8 @@ struct idiv {
  */
 struct mod {
     template <typename T1, typename T2>
-    __host__ __device__ auto operator()(const T1 &a,
-                                        const T2 &b) const -> decltype(a % b) {
+    __host__ __device__ auto operator()(const T1 &a, const T2 &b) const
+      -> decltype(a % b) {
         return a % b;
     }
 };
@@ -375,8 +374,8 @@ struct mod {
  */
 struct minus {
     template <typename T>
-    __host__ __device__ auto operator()(const T &a,
-                                        const T &b) const -> decltype(a - b) {
+    __host__ __device__ auto operator()(const T &a, const T &b) const
+      -> decltype(a - b) {
         return a - b;
     }
 };
@@ -883,8 +882,8 @@ class fusion_array {
     // Scalar constructor - only for non-masked arrays
     template <typename T>
     explicit fusion_array(T value)
-      : _begin(thrust::make_constant_iterator(value)),
-        _end(thrust::make_constant_iterator(value) + 1),
+      : _begin(cuda::make_constant_iterator(value)),
+        _end(cuda::make_constant_iterator(value) + 1),
         // Scalar has empty shape (rank 0)
         _mask_range{},
         _mask_storage{} {
@@ -1195,10 +1194,9 @@ class fusion_array {
      * @return A new fusion_array with the operation applied
      */
     template <typename BinaryOp>
-    auto map_adj(BinaryOp op) const
-      -> fusion_array<thrust::transform_iterator<
-        thrust::zip_function<BinaryOp>,
-        thrust::zip_iterator<thrust::tuple<Iterator, Iterator>>>> {
+    auto map_adj(BinaryOp op) const -> fusion_array<thrust::transform_iterator<
+      thrust::zip_function<BinaryOp>,
+      thrust::zip_iterator<thrust::tuple<Iterator, Iterator>>>> {
         auto zip_begin = thrust::make_zip_iterator(
           thrust::make_tuple(_begin, _begin + 1));
         auto transform_begin = thrust::make_transform_iterator(
@@ -1496,9 +1494,9 @@ class fusion_array {
             auto result = thrust::reduce(_begin, _end, init, op);
 
             // Return a fusion_array with a constant iterator of the result
-            return fusion_array<thrust::constant_iterator<decltype(result)>>(
-              thrust::make_constant_iterator(result),
-              thrust::make_constant_iterator(result) + 1,
+            return fusion_array<cuda::constant_iterator<decltype(result)>>(
+              cuda::make_constant_iterator(result),
+              cuda::make_constant_iterator(result) + 1,
               nullptr,
               std::vector<int>{});
         } else if constexpr (Axis == 2) {
@@ -1966,7 +1964,7 @@ class fusion_array {
           n, thrust::default_init);
 
         // Use constant_iterator for the initial counts (all 1s)
-        auto ones = thrust::make_constant_iterator(1);
+        auto ones = cuda::make_constant_iterator(1);
 
         // Run-length encode using reduce_by_key
         auto new_end = thrust::reduce_by_key(
@@ -2128,7 +2126,7 @@ class fusion_array {
 
         // Create a constant iterator to repeat the scalar value
         auto scalar_value   = *_begin;  // Get the scalar value
-        auto repeated_begin = thrust::make_constant_iterator(scalar_value);
+        auto repeated_begin = cuda::make_constant_iterator(scalar_value);
 
         return fusion_array<decltype(repeated_begin)>(
           repeated_begin, repeated_begin + n, nullptr);
@@ -2840,7 +2838,7 @@ auto array(std::initializer_list<T> init_list) {
  */
 template <typename T>
 auto scalar(T value) {
-    return fusion_array<thrust::constant_iterator<T>>(value);
+    return fusion_array<cuda::constant_iterator<T>>(value);
 }
 
 /**
@@ -2938,7 +2936,7 @@ auto mode(const fusion_array<Iterator, MaskIterator> &arr) {
     auto mode_value = arr.sort().rle().max_by_key(snd()).value().first;
 
     // Return as a scalar fusion_array
-    return fusion_array<thrust::constant_iterator<value_type>>(mode_value);
+    return fusion_array<cuda::constant_iterator<value_type>>(mode_value);
 }
 }  // namespace stats
 
