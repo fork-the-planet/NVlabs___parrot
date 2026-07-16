@@ -19,3 +19,4 @@ stop-runner.sh
 paper/
 *.csv
 __pycache__/
+git_sync_all.sh
